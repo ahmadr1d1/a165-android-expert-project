@@ -1,11 +1,15 @@
 package com.dicoding.tourismapp.core.data
 
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MediatorLiveData
+import androidx.lifecycle.map
 import com.dicoding.tourismapp.core.data.source.remote.network.ApiResponse
 import com.dicoding.tourismapp.core.data.source.local.LocalDataSource
 import com.dicoding.tourismapp.core.data.source.local.entity.TourismEntity
 import com.dicoding.tourismapp.core.data.source.remote.RemoteDataSource
 import com.dicoding.tourismapp.core.data.source.remote.response.TourismResponse
+import com.dicoding.tourismapp.core.domain.model.Tourism
+import com.dicoding.tourismapp.core.domain.repository.ITourismRepository
 import com.dicoding.tourismapp.core.utils.AppExecutors
 import com.dicoding.tourismapp.core.utils.DataMapper
 
@@ -13,7 +17,7 @@ class TourismRepository private constructor(
     private val remoteDataSource: RemoteDataSource,
     private val localDataSource: LocalDataSource,
     private val appExecutors: AppExecutors
-) {
+): ITourismRepository {
 
     companion object {
         @Volatile
@@ -29,13 +33,20 @@ class TourismRepository private constructor(
             }
     }
 
-    fun getAllTourism(): LiveData<Resource<List<TourismEntity>>> =
-        object : NetworkBoundResource<List<TourismEntity>, List<TourismResponse>>(appExecutors) {
-            override fun loadFromDB(): LiveData<List<TourismEntity>> {
-                return localDataSource.getAllTourism()
+    override fun getAllTourism(): LiveData<Resource<List<Tourism>>> =
+        object : NetworkBoundResource<List<Tourism>, List<TourismResponse>>(appExecutors) {
+            override fun loadFromDB(): LiveData<List<Tourism>> {
+                val source: LiveData<List<TourismEntity>> = localDataSource.getAllTourism()
+                val result = MediatorLiveData<List<Tourism>>()
+
+                result.addSource(source) { entities ->
+                    // manual konversi (helper singkat bisa dilihat di fun getFavoriteTourism)
+                    result.value = DataMapper.mapEntitiesToDomain(entities)
+                }
+                return result
             }
 
-            override fun shouldFetch(data: List<TourismEntity>?): Boolean =
+            override fun shouldFetch(data: List<Tourism>?): Boolean =
                 data.isNullOrEmpty()
 
             override fun createCall(): LiveData<ApiResponse<List<TourismResponse>>> =
@@ -47,12 +58,15 @@ class TourismRepository private constructor(
             }
         }.asLiveData()
 
-    fun getFavoriteTourism(): LiveData<List<TourismEntity>> {
-        return localDataSource.getFavoriteTourism()
+    override fun getFavoriteTourism(): LiveData<List<Tourism>> {
+        return localDataSource.getFavoriteTourism().map {
+            DataMapper.mapEntitiesToDomainManual(it)
+        }
     }
 
-    fun setFavoriteTourism(tourism: TourismEntity, state: Boolean) {
-        appExecutors.diskIO().execute { localDataSource.setFavoriteTourism(tourism, state) }
+    override fun setFavoriteTourism(tourism: Tourism, state: Boolean) {
+        val tourismEntity = DataMapper.mapDomainToEntity(tourism)
+        appExecutors.diskIO().execute { localDataSource.setFavoriteTourism(tourismEntity, state) }
     }
 }
 
