@@ -64,4 +64,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.livedata.ktx)
 
     api(libs.koin.android)
+
+    // Security Encryption Cryptografi
+    implementation(libs.android.database.sqlcipher)
+    implementation(libs.androidx.sqlite.ktx)
 }
